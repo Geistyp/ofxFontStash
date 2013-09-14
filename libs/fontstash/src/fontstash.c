@@ -29,10 +29,13 @@
  #endif
  */
 
+/*
 //oriol replacing platform includes to work better in OpenFrameworks
 //from http://stackoverflow.com/questions/5919996/how-to-detect-reliably-mac-os-x-ios-linux-windows-in-c-preprocessor
 #ifdef _WIN32
-#include <gl/gl.h>
+	//#include <gl/gl.h> //oriol making it work for win32
+	#include "GL\glew.h"
+	#include "GL\wglew.h"
 #elif _WIN64
 #include <gl/gl.h>
 #elif __APPLE__
@@ -58,7 +61,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-
+*/
+#include "ofMain.h"
 
 /* @rlyeh: removed STB_TRUETYPE_IMPLENTATION. We link it externally */
 #include "stb_truetype.h"
@@ -73,6 +77,11 @@
 #define BMFONT      3
 
 static int idx = 1;
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 static unsigned int hashint(unsigned int a)
 {
@@ -179,8 +188,6 @@ static unsigned int decutf8(unsigned int* state, unsigned int* codep, unsigned i
 	return *state;
 }
 
-
-
 struct sth_stash* sth_create(int cachew, int cacheh)
 {
 	struct sth_stash* stash = NULL;
@@ -193,7 +200,7 @@ struct sth_stash* sth_create(int cachew, int cacheh)
 	memset(stash,0,sizeof(struct sth_stash));
 
 	// Create data for clearing the textures
-	empty_data = malloc(cachew * cacheh);
+	empty_data = (GLubyte*)	malloc(cachew * cacheh);
 	if (empty_data == NULL) goto error;
 	memset(empty_data, 0, cachew * cacheh);
 
@@ -471,6 +478,14 @@ static struct sth_glyph* get_glyph(struct sth_stash* stash, struct sth_font* fnt
 						texture = texture->next;
 						if (texture == NULL) goto error;
 						memset(texture,0,sizeof(struct sth_texture));
+						//oriol counting how many we have created so far!
+						int numTex = 1;
+						struct sth_texture* tex = stash->tt_textures;
+						while (tex->next != NULL) {
+							numTex++;
+							tex = tex->next;
+						}
+						printf("fontStash allocating a new texture of %d x %d (%d used so far)\n", stash->tw,stash->th, numTex );
 						glGenTextures(1, &texture->id);
 						if (!texture->id) goto error;
 						glBindTexture(GL_TEXTURE_2D, texture->id);
@@ -577,12 +592,65 @@ static float* setv(float* v, float x, float y, float s, float t)
 
 static void flush_draw(struct sth_stash* stash)
 {
+    
+    static ofShader sth_shader;
+    if ( !sth_shader.isLoaded() ){
+#define STRINGIFY(A) #A
+        string vertexment = STRINGIFY(
+                                      attribute vec4 position;
+                                      attribute vec2 texcoord;
+                                      
+                                      varying vec2 texCoordVarying;
+                                      
+                                      uniform mat4 textureMatrix;
+                                      uniform mat4 modelViewProjectionMatrix;
+                                      
+                                      void main(){
+                                          
+                                          //get our current vertex position so we can modify it
+                                          vec4 pos = modelViewProjectionMatrix * position;
+                                          
+                                          gl_Position = pos;
+                                          
+                                          texCoordVarying = (textureMatrix*vec4(texcoord.x,texcoord.y,0,1)).xy;
+                                          
+                                      }
+        );
+        string fragment = STRINGIFY(
+
+                                    precision highp float;
+                                    
+                                    uniform sampler2D tex;
+                                    
+                                    varying vec2 texCoordVarying;
+                                    
+                                    void main()
+                                    {
+                                        vec4 color = texture2D( tex, texCoordVarying );
+                                        gl_FragColor = color;
+                                    }
+        );
+        
+        sth_shader.setupShaderFromSource(GL_VERTEX_SHADER, vertexment);
+        sth_shader.setupShaderFromSource(GL_FRAGMENT_SHADER, fragment);
+        
+        sth_shader.bindAttribute(0, "position");
+        sth_shader.bindAttribute(1, "texcoord");
+        
+        sth_shader.linkProgram();
+        
+        
+
+    }
+     
 	struct sth_texture* texture = stash->tt_textures;
 	short tt = 1;
 	while (texture)
 	{
 		if (texture->nverts > 0)
-		{			
+		{
+            /*
+            glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, texture->id);
 			glEnable(GL_TEXTURE_2D);
 			glEnableClientState(GL_VERTEX_ARRAY);
@@ -593,7 +661,26 @@ static void flush_draw(struct sth_stash* stash)
 			glDisable(GL_TEXTURE_2D);
 			glDisableClientState(GL_VERTEX_ARRAY);
 			glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+            glBindTexture(GL_TEXTURE_2D, 0);
 			texture->nverts = 0;
+            */
+            
+            
+            glEnableVertexAttribArray(sth_shader.getAttributeLocation("position"));
+            glVertexAttribPointer(sth_shader.getAttributeLocation("position"), 2, GL_FLOAT, GL_FALSE, VERT_STRIDE, texture->verts);
+            glEnableVertexAttribArray(sth_shader.getAttributeLocation("texcoord"));
+            glVertexAttribPointer(sth_shader.getAttributeLocation("texcoord"), 2, GL_FLOAT, GL_FALSE, VERT_STRIDE, texture->verts+2);
+            
+            sth_shader.begin();
+            sth_shader.setUniformTexture("tex", GL_TEXTURE_2D, texture->id, 0);
+            glDrawArrays(GL_TRIANGLES, 0, texture->nverts);
+            sth_shader.end();
+            
+            glDisableVertexAttribArray(sth_shader.getAttributeLocation("texcoord"));
+            glDisableVertexAttribArray(sth_shader.getAttributeLocation("position"));
+            
+            texture->nverts = 0;
+            
 		}
 		texture = texture->next;
 		if (!texture && tt)
@@ -782,3 +869,8 @@ void sth_delete(struct sth_stash* stash)
 	free(stash->empty_data);
 	free(stash);
 }
+
+
+#ifdef __cplusplus
+}
+#endif

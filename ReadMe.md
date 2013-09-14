@@ -1,3 +1,6 @@
+This is a iOS version of ofxFontStash, but seem is a little slow then default string render.
+Not test in other platform, but I think should work too.
+
 # ofxFontStash: Dynamic font glyph cache for OpenGL
 
 Quick and simple Addon wrapping [Font-Stash](https://github.com/akrinke/Font-Stash). 

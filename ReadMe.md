@@ -1,7 +1,5 @@
 This is a iOS version of ofxFontStash, but seem is a little slow then default string render.
 
-Not test in other platform, but I think should work too.
-
 https://github.com/armadillu/ofxTimeMeasurements
 
 https://github.com/bakercp/ofxUnicode

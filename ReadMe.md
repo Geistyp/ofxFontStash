@@ -1,8 +1,8 @@
-This is a iOS version of ofxFontStash, but seem is a little slow then default string render.
+utf8cpp is in core, reomve ofxUnicode and use it.
 
+------
 https://github.com/armadillu/ofxTimeMeasurements
 
-https://github.com/bakercp/ofxUnicode
 
 # ofxFontStash: Dynamic font glyph cache for OpenGL
 
